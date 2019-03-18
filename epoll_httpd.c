@@ -10,9 +10,30 @@
 #include <sys/epoll.h>
 #include <errno.h>
 
-#define MAXEVENTS 40960
+// for setrlimit
+#include <sys/time.h>
+#include <sys/resource.h>
 
-static int make_socket_non_blocking(int sfd)
+
+#define MAX_EVENTS 1<<15
+#define SRV_BACKLOG 1<<10
+#define MAX_OPEN_FILES 100000
+
+static int ulimit_set_max_open_files(int max_files) {
+    struct rlimit rl;
+
+    rl.rlim_cur = max_files;
+    rl.rlim_max = max_files;
+
+    if (setrlimit(RLIMIT_NOFILE, &rl) < 0) {
+        perror("setrlimit");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int socket_set_non_blocking(int sfd)
 {
     int flags, s;
 
@@ -32,20 +53,32 @@ static int make_socket_non_blocking(int sfd)
     return 0;
 }
 
-static int create_and_bind(char *port)
+static int socket_set_reusable(int sfd) {
+    int opt = 1;
+    int flags = setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    if (flags < 0) {
+        perror("setsockopt");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int socket_create_and_bind(char *port)
 {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
     int s, sfd;
 
     memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;    /* Return IPv4 and IPv6 choices */
-    hints.ai_socktype = SOCK_STREAM;    /* We want a TCP socket */
-    hints.ai_flags = AI_PASSIVE;    /* All interfaces */
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
 
     s = getaddrinfo(NULL, port, &hints, &result);
     if (s != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+        perror("getaddrinfo");
         return -1;
     }
 
@@ -75,7 +108,9 @@ static int create_and_bind(char *port)
 
 int main(int argc, char *argv[])
 {
-    int sfd, s;
+    /* listening socket fd */
+    int sfd;
+    /* epoll fd */
     int efd;
     struct epoll_event event;
     struct epoll_event *events;
@@ -85,22 +120,24 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    sfd = create_and_bind(argv[1]);
+    sfd = socket_create_and_bind(argv[1]);
     if (sfd == -1)
         abort();
 
-    int opt = 1;
-
-    setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-    s = make_socket_non_blocking(sfd);
-    if (s == -1)
+    if (socket_set_non_blocking(sfd) < 0) 
         abort();
 
-    s = listen(sfd, 1);
-    if (s == -1) {
+    if (socket_set_reusable(sfd) < 0) 
+        abort();
+
+    if (listen(sfd, 1) < 0) {
         perror("listen");
         abort();
+    }
+
+    // 尝试改大ulimit最大打开文件数，失败报错但不退出
+    if (ulimit_set_max_open_files(MAX_OPEN_FILES)) {
+        fprintf(stderr, "Cannot set ulimit max open files");
     }
 
     efd = epoll_create1(0);
@@ -111,26 +148,25 @@ int main(int argc, char *argv[])
 
     event.data.fd = sfd;
     event.events = EPOLLIN | EPOLLET;
-    s = epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event);
-    if (s == -1) {
+    if (epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event) < 0) {
         perror("epoll_ctl");
         abort();
     }
 
     /* Buffer where events are returned */
-    events = calloc(MAXEVENTS, sizeof event);
+    events = calloc(MAX_EVENTS, sizeof event);
 
     /* The event loop */
     while (1) {
         int n, i;
 
-        n = epoll_wait(efd, events, MAXEVENTS, -1);
+        n = epoll_wait(efd, events, MAX_EVENTS, -1);
         for (i = 0; i < n; i++) {
             if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
                 || (!(events[i].events & EPOLLIN))) {
                 /* An error has occured on this fd, or the socket is not
                    ready for reading (why were we notified then?) */
-                fprintf(stderr, "epoll error\n");
+                perror("epoll_wait");
                 close(events[i].data.fd);
                 continue;
             }
@@ -167,10 +203,10 @@ int main(int argc, char *argv[])
                                    sizeof so_linger);
                     }
 
-                    s = getnameinfo(&in_addr, in_len,
-                                    hbuf, sizeof hbuf,
-                                    sbuf, sizeof sbuf,
-                                    NI_NUMERICHOST | NI_NUMERICSERV);
+                    getnameinfo(&in_addr, in_len,
+                                hbuf, sizeof hbuf,
+                                sbuf, sizeof sbuf,
+                                NI_NUMERICHOST | NI_NUMERICSERV);
                     /*
                        if (s == 0)
                        {
@@ -181,14 +217,12 @@ int main(int argc, char *argv[])
 
                     /* Make the incoming socket non-blocking and add it to the
                        list of fds to monitor. */
-                    s = make_socket_non_blocking(infd);
-                    if (s == -1)
+                    if (socket_set_non_blocking(infd) < 0)
                         abort();
 
                     event.data.fd = infd;
                     event.events = EPOLLIN | EPOLLET;
-                    s = epoll_ctl(efd, EPOLL_CTL_ADD, infd, &event);
-                    if (s == -1) {
+                    if (epoll_ctl(efd, EPOLL_CTL_ADD, infd, &event) < 0) {
                         perror("epoll_ctl");
                         abort();
                     }
