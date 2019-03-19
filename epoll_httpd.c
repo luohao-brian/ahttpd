@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <errno.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
 // for setrlimit
 #include <sys/time.h>
@@ -53,11 +55,15 @@ static int socket_set_non_blocking(int sfd)
     return 0;
 }
 
-static int socket_set_reusable(int sfd) {
+static int socket_set_opts(int sfd) {
     int opt = 1;
-    int flags = setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    if (flags < 0) {
+    if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        return -1;
+    }
+    
+    if (setsockopt(sfd, IPPROTO_TCP, TCP_CORK, &opt, sizeof(opt)) < 0) {
         perror("setsockopt");
         return -1;
     }
@@ -127,7 +133,7 @@ int main(int argc, char *argv[])
     if (socket_set_non_blocking(sfd) < 0) 
         abort();
 
-    if (socket_set_reusable(sfd) < 0) 
+    if (socket_set_opts(sfd) < 0) 
         abort();
 
     if (listen(sfd, 1) < 0) {
@@ -192,7 +198,7 @@ int main(int argc, char *argv[])
                             break;
                         }
                     }
-
+/*
                     {
                         struct linger so_linger;
 
@@ -202,6 +208,7 @@ int main(int argc, char *argv[])
                                    SOL_SOCKET, SO_LINGER, &so_linger,
                                    sizeof so_linger);
                     }
+*/
 
                     getnameinfo(&in_addr, in_len,
                                 hbuf, sizeof hbuf,
@@ -218,6 +225,9 @@ int main(int argc, char *argv[])
                     /* Make the incoming socket non-blocking and add it to the
                        list of fds to monitor. */
                     if (socket_set_non_blocking(infd) < 0)
+                        abort();
+
+                    if (socket_set_opts(infd) < 0)
                         abort();
 
                     event.data.fd = infd;
