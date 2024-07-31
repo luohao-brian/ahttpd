@@ -1,11 +1,10 @@
-### AHttpd
+### ahttpd
 
 旨在通过httpd实现，对比各种高性能io和网络模型
 一个基于epoll的高性能httpd。
 
 * `epoll_httpd.c` - 基于原生epoll的httpd;
 * `ev_httpd.c` - 基于libevent的httpd;
-* `go_httpd.go` - 基于go-http的httpd;
 
 ### 测试
 
