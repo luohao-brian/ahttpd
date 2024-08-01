@@ -2,6 +2,7 @@
 *.o
 *.out
 ahttpd
+ahttpd.ev
 
 # 可执行文件和库
 *.so

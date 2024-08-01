@@ -7,10 +7,10 @@ ahttpd: $(OBJS)
 	$(CC) -o $@ $^
 
 ev: event.o
-	$(CC) -o ahttpd_ev $^ -levent
+	$(CC) -o ahttpd.ev $^ -levent
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o ahttpd ahttpd_ev
+	rm -f *.o ahttpd ahttpd.ev
