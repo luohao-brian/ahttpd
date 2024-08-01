@@ -68,8 +68,12 @@ static void handleRequest(int client_fd, int epoll_fd) {
         send(client_fd, response, strlen(response), 0);
     }
 
-    close(client_fd);
-    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+    //close(client_fd);
+    //epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+    if (strstr(buffer, "Connection: Close")) {
+        close(client_fd);
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+    }
 }
 
 int main(int argc, char* argv[])
@@ -171,7 +175,10 @@ int main(int argc, char* argv[])
 
                 // 设置客户端套接字为非阻塞模式
                 setSockNonBlock(client_fd);
-                setsockopt(client_fd, IPPROTO_TCP, TCP_CORK, &on, sizeof(on));
+                if (setsockopt(client_fd, SOL_TCP, TCP_NODELAY, &on, sizeof(on))) {
+                    perror("set TCP NODELAY");
+                    continue;
+                }
 
                 // 注册客户端读事件为 ET 模式
                 // 使用 ET 模式下即使给客户端 fd 注册了检测可写事件不会一直触发，
