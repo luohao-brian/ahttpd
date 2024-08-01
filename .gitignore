@@ -1,4 +1,36 @@
-a.out
-epoll_httpd
-ev_httpd
-go_httpd
+# 编译生成的文件
+*.o
+*.out
+ahttpd
+
+# 可执行文件和库
+*.so
+*.a
+
+# 中间文件和备份文件
+*.bak
+*.swp
+*.~
+
+# 编译生成的目录
+build/
+debug/
+
+# 操作系统生成的临时文件
+.DS_Store
+Thumbs.db
+
+# IDE 相关
+.idea/
+.vscode/
+
+# 日志文件
+*.log
+
+# 自动生成的文档
+*.pdf
+*.doc
+
+# 个人设置和配置文件
+*.user
+

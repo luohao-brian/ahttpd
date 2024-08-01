@@ -1,0 +1,1 @@
+-bad -npro -kr -i4 -ts4 -nut -sob -l80 -ss -bli 0 -br -bap
