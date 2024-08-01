@@ -42,6 +42,29 @@ static int setSockNonBlock(int so)
     return 0;
 }
 
+// 改进的 strstr 函数
+static char *__strstr(const char *haystack, const char *needle) {
+    int haystackLen = strlen(haystack);
+    int needleLen = strlen(needle);
+
+    if (needleLen == 0) {
+        return (char *)haystack;
+    }
+
+    for (int i = 0; i <= haystackLen - needleLen; i++) {
+        int j;
+        for (j = 0; j < needleLen; j++) {
+            if (haystack[i + j]!= needle[j]) {
+                break;
+            }
+        }
+        if (j == needleLen) {
+            return (char *)&haystack[i];
+        }
+    }
+    return NULL;
+}
+
 // 解析 HTTP 请求并处理
 static void handleRequest(int client_fd, int epoll_fd) {
     char buffer[BUFFER_SIZE];
@@ -70,7 +93,7 @@ static void handleRequest(int client_fd, int epoll_fd) {
 
     //close(client_fd);
     //epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
-    if (strstr(buffer, "Connection: Close")) {
+    if (__strstr(buffer, "Connection: Close")) {
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
     }
